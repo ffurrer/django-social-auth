@@ -41,6 +41,9 @@ GITHUB_USER_DATA_URL = 'https://api.github.com/user'
 GITHUB_ORGANIZATION_MEMBER_OF_URL = \
         'https://api.github.com/orgs/{org}/members/{username}'
 
+GITHUB_TEAM_MEMBER_OF_URL = \
+        'https://api.github.com/teams/{team_id}/members/{username}'
+
 GITHUB_SERVER = 'github.com'
 
 
@@ -100,6 +103,7 @@ class GithubAuth(BaseOAuth2):
     SCOPE_VAR_NAME = 'GITHUB_EXTENDED_PERMISSIONS'
 
     GITHUB_ORGANIZATION = getattr(settings, 'GITHUB_ORGANIZATION', None)
+    GITHUB_TEAM_ID = getattr(settings, 'GITHUB_TEAM_ID', None)
 
     def user_data(self, access_token, *args, **kwargs):
         """Loads user data from service"""
@@ -112,7 +116,7 @@ class GithubAuth(BaseOAuth2):
         except ValueError:
             data = None
 
-        # if we have a github organization defined, test that the current users
+        # If we have a github organization defined, test that the current user
         # is a member of that organization.
         if data and self.GITHUB_ORGANIZATION:
             member_url = GITHUB_ORGANIZATION_MEMBER_OF_URL.format(
@@ -132,6 +136,24 @@ class GithubAuth(BaseOAuth2):
                 if response.code != 204:
                     raise AuthFailed('User doesn\'t belong to the '
                                      'organization')
+
+        # If we have a github team id defined, test that the current user
+        # is a member of that team.
+        if data and self.GITHUB_TEAM_ID:
+            member_url = GITHUB_TEAM_MEMBER_OF_URL.format(
+                username=data.get('login'),
+                team_id=self.GITHUB_TEAM_ID,
+            ) + '?' + urlencode({
+                'access_token': access_token
+            })
+            try:
+                response = dsa_urlopen(member_url)
+            except HTTPError:
+                data = None
+                raise AuthFailed(self, 'User doesn\'t belong to the team')
+            else:
+                if response.code != 204:
+                    raise AuthFailed('User doesn\'t belong to the team')
         return data
 
 # Backend definition
